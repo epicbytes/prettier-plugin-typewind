@@ -1,6 +1,7 @@
 import path from "path";
 
 import {extractVariantsAndElements} from "./utils/ast_utils";
+import prettier from "prettier";
 
 const regMinus = /-/ig;
 const regRunes = /[\/\[\:]/ig;
@@ -10,13 +11,13 @@ export class TwClassesConverter {
 
     nodeModulesPath
 
-    constructor(opts) {
+    constructor(opts: Record<string, any>) {
         if (opts.nodeModulesPath) {
             this.nodeModulesPath = path.join(__dirname, '../../../node_modules')
         }
     }
 
-    public convertFromString(classes: string): any {
+    public convertFromString(classes: string): prettier.AST {
         return {
             type: 'JSXExpressionContainer',
             expression: AppendMemberExpression(
@@ -29,38 +30,41 @@ export class TwClassesConverter {
 }
 
 function AppendMemberExpression(classElements: Record<string, any>): any {
-    return renderElements(Object.entries(classElements).reverse())
+    return renderElements(Object.entries(classElements))
 }
 
-function renderElements(elements) {
+function renderElements(elements: string[][]) {
     let result;
     while (elements.length > 0) {
-        const lastOne = elements.pop()
-        if (!result) {
-            result = renderEntry(parseElementName(lastOne[0]), parseElementName("tw"))
-            continue
-        }
-        if (lastOne[1] === null) {
-            result = renderEntry(parseElementName(lastOne[0]), result)
-            continue
-        }
-        result = renderGroupEntry(parseElementName(lastOne[0]), result,
-            lastOne[0] === "raw" ? renderLiteral(Object.keys(lastOne[1]).join(" ")) : renderElements(Object.entries(lastOne[1]).reverse()))
-    }
+        // @ts-ignore
+        const [className, subClasses] = elements.shift()
+        switch (true) {
+            case subClasses === null:
+                result = renderEntry(parseElementName(className), result ?? parseElementName("tw"))
+                break
+            case subClasses !== null:
+                const attributes = className === "raw"
+                    ? renderLiteral(Object.keys(subClasses).join(" "))
+                    : renderElements(Object.entries(subClasses))
 
+                result = renderGroupEntry(parseElementName(className), result ?? parseElementName("tw"), attributes)
+                break
+            default:
+            // just skip generation of Node
+        }
+    }
     return result
 }
 
 function renderLiteral(text: string) {
     return {
-        "type": "Literal",
-        "value": text,
-        "raw": `\"${text}\"`,
-
+        type: "Literal",
+        value: text,
+        raw: `\"${text}\"`,
     }
 }
 
-function renderEntry(property: any, object: any): any {
+function renderEntry(property: prettier.AST, object: prettier.AST): prettier.AST {
     return {
         type: 'MemberExpression',
         property,
@@ -68,7 +72,7 @@ function renderEntry(property: any, object: any): any {
     }
 }
 
-function renderGroupEntry(property: any, object: any, attributes: any): any {
+function renderGroupEntry(property: prettier.AST, object: prettier.AST, attributes: prettier.AST): prettier.AST {
     return {
         type: "CallExpression",
         callee: {
@@ -80,11 +84,11 @@ function renderGroupEntry(property: any, object: any, attributes: any): any {
     }
 }
 
-function parseElementName(name: string): any {
+function parseElementName(name: string): prettier.AST {
     if (!regRunes.test(name)) {
         return {
-            "type": "Identifier",
-            "name": name
+            type: "Identifier",
+            name: name
         }
     }
     const opacityMatches = replaceOpacity.exec(name)
@@ -92,7 +96,7 @@ function parseElementName(name: string): any {
         name = `${opacityMatches.input.slice(0, opacityMatches.index)}$[${opacityMatches[0].slice(1)}]`
     }
     return {
-        "type": "Identifier",
-        "name": name.replace("[", "['").replace("]", "']")
+        type: "Identifier",
+        name: name.replace("[", "['").replace("]", "']")
     }
 }

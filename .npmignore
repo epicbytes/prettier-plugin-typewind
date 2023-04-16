@@ -1,5 +1,4 @@
 .prettierrc
-./test-tailwind-config.js
 ./test.js
 src/
 ./tsconfig.json

@@ -29,7 +29,7 @@ export function TableFieldArray({
       <Show when={typeof onAddClick !== "undefined"}>
         <div class={tw.raw("group peer")}>
           <button
-            class={"btn btn-outline btn-sm"}
+            class={"first-line:uppercase first-line:tracking-widest first-letter:text-7xl first-letter:font-bold first-letter:text-white first-letter:mr-3 first-letter:float-left"}
             onClick={(event) => {
               event.preventDefault();
               onAddClick();

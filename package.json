@@ -1,6 +1,6 @@
 {
   "name": "prettier-plugin-typewind",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "description": "Convert tailwind classes to typewind objects",
   "author": "Igor Kornelli <aztecsrv@gmail.com>",
   "homepage": "https://github.com/epicbytes/prettier-plugin-typewind",
@@ -8,34 +8,54 @@
     "type": "git",
     "url": "git+https://github.com/epicbytes/prettier-plugin-typewind.git"
   },
+  "main": "lib/index.js",
+  "files": [
+    "dist"
+  ],
   "keywords": [
     "prettier",
     "plugin",
     "tailwindcss",
     "typewind"
   ],
-  "main": "prettier-plugin-typewind.js",
   "license": "MIT",
   "private": false,
   "scripts": {
-    "build": "rimraf ./lib && tsc"
+    "dev": "vite",
+    "build": "rimraf ./lib && tsc && vite build",
+    "test": "vitest",
+    "coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@dxtr.dev/casex": "^4.0.3",
-    "casex": "^3.0.2",
     "dlv": "^1.1.3",
-    "dset": "^3.1.2",
-    "tailwind-classes-sorter": "^0.2.5"
+    "dset": "^3.1.2"
   },
   "devDependencies": {
+    "@types/dlv": "^1.1.2",
     "@types/node": "^18.15.11",
+    "@types/object-hash": "^3.0.2",
+    "@types/prettier": "^2.7.2",
+    "@types/tailwindcss": "^3.1.0",
+    "ast-types": "^0.14.2",
+    "clear-module": "^4.1.2",
+    "escalade": "^3.1.1",
+    "line-column": "^1.0.2",
+    "object-hash": "^3.0.0",
     "prettier": "^2.8.7",
     "rimraf": "^3.0.2",
     "tailwindcss": "^3.2.4",
-    "typescript": "^4.9.3"
+    "typescript": "^4.9.3",
+    "vite": "^4.2.0",
+    "vite-tsconfig-paths": "^4.2.0",
+    "vitest": "^0.30.1"
   },
   "peerDependencies": {
     "prettier": "^2.0.0",
     "tailwindcss": "*"
+  },
+  "importSort": {
+    ".js, .jsx, .ts, .tsx": {
+      "style": "module"
+    }
   }
 }

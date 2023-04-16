@@ -10,6 +10,6 @@
 		"moduleResolution": "node",
 		"noImplicitAny": false
 	},
-	"lib": ["ESNEXT"],
-	"include": ["src"]
+	"include": ["src"],
+	"exclude": ["lib", "node_modules"]
 }
