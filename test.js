@@ -1,45 +1,57 @@
-const fs = require('fs')
-const path = require('path')
 const prettier = require('prettier')
 
 const code = `
-import { For, Show } from "solid-js";
-import { Icon } from "solid-heroicons";
-import { plus } from "solid-heroicons/outline";
-export function TableFieldArray({
-  arrayField,
-  RowElement,
-  HeaderElement,
-  onAddClick = undefined,
-}) {
+import { createSignal, Match, Switch } from "solid-js";
+
+export type PromptButtonProps = {
+  buttonTitle: string;
+  onAcceptClick?: () => void;
+  onDeclineClick?: () => void;
+};
+
+export function PromptButton({
+                               buttonTitle = "",
+                               onAcceptClick,
+                               onDeclineClick
+                             }: PromptButtonProps) {
+  const [requested, setRequested] = createSignal(false);
   return (
-    <div class="overflow-x-auto md:hover:bg-red-100/56 md:hover:relative text-[48px] bg-red-500/34 md:text-center hover:text-sm hover:uppercase">
-      <table class="table w-full table-compact group">
-        <thead classList={{ "text-error": !arrayField.isValid }}>
-          <HeaderElement />
-        </thead>
-        <tbody>
-          <For each={arrayField.controls}>
-            {(item, index) => (
-              <RowElement item={item} index={index} arrayField={arrayField} />
-            )}
-          </For>
-        </tbody>
-      </table>
-      <Show when={typeof onAddClick !== "undefined"}>
-        <div class={tw.raw("group peer")}>
+    <div class={"flex space-x-2 justify-end"}>
+      <Switch>
+        <Match when={!requested()}>
           <button
-            class={"first-line:uppercase first-line:tracking-widest first-letter:text-7xl first-letter:font-bold first-letter:text-white first-letter:mr-3 first-letter:float-left"}
+            class={tw.btn.btn_error.btn_outline.btn_sm.normal_case}
             onClick={(event) => {
               event.preventDefault();
-              onAddClick();
+              setRequested(true);
             }}
           >
-            <Icon path={plus} class={"w-4 h-4"} />
-            <span>Add</span>
+            {buttonTitle}
           </button>
-        </div>
-      </Show>
+        </Match>
+        <Match when={requested()}>
+          <button
+            class={"btn btn-sm btn-outline btn-warning normal-case"}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(false);
+              onAcceptClick && onAcceptClick();
+            }}
+          >
+            yes
+          </button>
+          <button
+            class={"btn btn-sm btn-outline normal-case"}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(false);
+              onDeclineClick && onDeclineClick();
+            }}
+          >
+            no
+          </button>
+        </Match>
+      </Switch>
     </div>
   );
 }

@@ -13,13 +13,12 @@ import {generateRules as generateRulesFallback} from 'tailwindcss/lib/lib/genera
 import {createContext as createContextFallback} from 'tailwindcss/lib/lib/setupContextUtils'
 import loadConfigFallback from 'tailwindcss/loadConfig'
 import resolveConfigFallback from 'tailwindcss/resolveConfig'
-import ts from "typescript";
-import dlv from "dlv";
-import {dset} from "dset";
 
 let base = getBasePlugins()
 
 let contextMap = new Map()
+let typewindImported = false;
+let classesWasChanged = false;
 
 function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
     return {
@@ -36,10 +35,6 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
 
         parse(text: string, parsers: any, options: any = {}) {
             let original = getCompatibleParser(parserFormat, options)
-
-            if (original.astFormat === 'svelte-ast') {
-                options.printer = printers['svelte-ast']
-            }
 
             let ast = original.parse(text, parsers, options)
             let tailwindConfigPath = '__default__'
@@ -138,7 +133,13 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
 }
 
 function transformJavaScript(ast: prettier.AST) {
+
     visit(ast, {
+        ImportDeclaration(node: prettier.AST) {
+            if (node.importKind === "value" && node.source.value === "typewind") {
+                typewindImported = true
+            }
+        },
         JSXAttribute(node: prettier.AST) {
             if (!node.value) {
                 return
@@ -146,9 +147,11 @@ function transformJavaScript(ast: prettier.AST) {
             if (['class', 'className', 'classList'].includes(node.name.name)) {
                 if (node.value.type === "Literal") {
                     node.value = convertFromString(node.value.value)
+                    classesWasChanged = true
                 } else if (node.value.type === 'JSXExpressionContainer') {
-                    if (!["CallExpression", "ObjectExpression"].includes(node.value?.expression?.type)) {
+                    if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type)) {
                         node.value = convertFromString(node.value.expression.value)
+                        classesWasChanged = true
                     }
                     /*visit(node.value, (node, parent, key) => {
                         if (isStringLiteral(node)) {
@@ -159,7 +162,7 @@ function transformJavaScript(ast: prettier.AST) {
                     })*/
                 }
             }
-        },
+        }
     })
 }
 
@@ -241,37 +244,13 @@ function visit(ast: prettier.AST, callbackMap: Record<string, any>) {
                 _visit(child, node, keys[i], i, {...meta})
             }
         }
+
     }
 
     _visit(ast)
-}
-
-
-export function injectTwModule (text:string, ast:prettier.AST){
-    if (!checkExistsImportedModule("typewind", "tw", text)) {
-        return  appendImportToFile("typewind", ["tw"], ast)
+    if (classesWasChanged && !typewindImported) {
+        ast.body = appendImportToFile("typewind", ["tw"], ast)
     }
-
-    return ast
-}
-
-export function checkExistsImportedModule(moduleName: string, specifier: string, text: string): boolean {
-    const file = ts.createSourceFile("x.ts", text, ts.ScriptTarget.Latest)
-
-    // @ts-ignore
-    file.forEachChild(child => {
-        if (ts.SyntaxKind[child.kind] === "ImportDeclaration") {
-            let importDecl: any = child
-            // @ts-ignore
-            const clauses = importDecl.importClause.namedBindings?.elements.map(el => el.name.escapedText)
-            const localModuleName = importDecl.moduleSpecifier.text
-            if (clauses.includes(specifier) && localModuleName === moduleName) {
-                return true
-            }
-        }
-    })
-
-    return false
 }
 
 export function appendImportToFile(moduleName: string, specifiers: string[], ast: any): any {
@@ -294,9 +273,7 @@ export function appendImportToFile(moduleName: string, specifiers: string[], ast
         "assertions": [],
     })
 
-    ast.body = [importModuleAST, ...ast.body]
-
-    return ast
+    return [importModuleAST, ...ast.body]
 }
 
 const regMinus = /-/ig;
@@ -386,7 +363,46 @@ function parseElementName(name: string): prettier.AST {
     }
 }
 
-const sortingByNameNull = (prev:any, next:any) => (Number(Boolean(prev[1])) + prev[0]).localeCompare(Number(Boolean(next[1])) + next[0])
+function dlv(obj:Record<string, any>, key:string[]|string, def?, p?, undef?) {
+    if (typeof key === "string") {
+        key = key.split ? key.split('.') : key;
+    }
+    for (p = 0; p < key.length; p++) {
+        obj = obj ? obj[key[p]] : undef;
+    }
+    return obj === undef ? def : obj;
+}
+
+function merge(a:any, b:any, k?:any) {
+    if (typeof a === 'object' && typeof b === 'object') {
+        if (Array.isArray(a) && Array.isArray(b)) {
+            for (k=0; k < b.length; k++) {
+                a[k] = merge(a[k], b[k]);
+            }
+        } else {
+            for (k in b) {
+                if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
+                a[k] = merge(a[k], b[k]);
+            }
+        }
+        return a;
+    }
+    return b;
+}
+
+function dset<T extends object, V>(obj: T, keys: string | ArrayLike<string | number>, value: V): void;
+
+function dset(obj, keys, val) {
+    keys.split && (keys=keys.split('.'));
+    var i=0, l=keys.length, t=obj, x, k;
+    while (i < l) {
+        k = keys[i++];
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
+        t = t[k] = (i === l) ? merge(t[k],val) : (typeof(x=t[k])===typeof keys) ? x : (keys[i]*0 !== 0 || !!~(''+keys[i]).indexOf('.')) ? {} : [];
+    }
+}
+
+const sortingByNameNull = (prev: any, next: any) => (Number(Boolean(prev[1])) + prev[0]).localeCompare(Number(Boolean(next[1])) + next[0])
 
 const extractVariantsAndElements = (classList: string[]) => {
     let elements: Record<string, any> = {}
