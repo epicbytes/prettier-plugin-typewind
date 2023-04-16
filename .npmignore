@@ -1,0 +1,7 @@
+.prettierrc
+./test-tailwind-config.js
+./test.js
+src/
+./tsconfig.json
+./banner.jpg
+./yarn-error.log
