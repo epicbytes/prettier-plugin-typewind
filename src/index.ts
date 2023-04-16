@@ -13,11 +13,9 @@ import {generateRules as generateRulesFallback} from 'tailwindcss/lib/lib/genera
 import {createContext as createContextFallback} from 'tailwindcss/lib/lib/setupContextUtils'
 import loadConfigFallback from 'tailwindcss/loadConfig'
 import resolveConfigFallback from 'tailwindcss/resolveConfig'
-import {TwClassesConverter} from "./tw-classes-converter";
-
-const twClassesConverter = new TwClassesConverter({
-    nodeModulesPath: path.join(__dirname, '../../../node_modules'),
-})
+import ts from "typescript";
+import dlv from "dlv";
+import {dset} from "dset";
 
 let base = getBasePlugins()
 
@@ -147,10 +145,10 @@ function transformJavaScript(ast: prettier.AST) {
             }
             if (['class', 'className', 'classList'].includes(node.name.name)) {
                 if (node.value.type === "Literal") {
-                    node.value = twClassesConverter.convertFromString(node.value.value)
+                    node.value = convertFromString(node.value.value)
                 } else if (node.value.type === 'JSXExpressionContainer') {
                     if (!["CallExpression", "ObjectExpression"].includes(node.value?.expression?.type)) {
-                        node.value = twClassesConverter.convertFromString(node.value.expression.value)
+                        node.value = convertFromString(node.value.expression.value)
                     }
                     /*visit(node.value, (node, parent, key) => {
                         if (isStringLiteral(node)) {
@@ -247,6 +245,183 @@ function visit(ast: prettier.AST, callbackMap: Record<string, any>) {
 
     _visit(ast)
 }
+
+
+export function injectTwModule (text:string, ast:prettier.AST){
+    if (!checkExistsImportedModule("typewind", "tw", text)) {
+        return  appendImportToFile("typewind", ["tw"], ast)
+    }
+
+    return ast
+}
+
+export function checkExistsImportedModule(moduleName: string, specifier: string, text: string): boolean {
+    const file = ts.createSourceFile("x.ts", text, ts.ScriptTarget.Latest)
+
+    // @ts-ignore
+    file.forEachChild(child => {
+        if (ts.SyntaxKind[child.kind] === "ImportDeclaration") {
+            let importDecl: any = child
+            // @ts-ignore
+            const clauses = importDecl.importClause.namedBindings?.elements.map(el => el.name.escapedText)
+            const localModuleName = importDecl.moduleSpecifier.text
+            if (clauses.includes(specifier) && localModuleName === moduleName) {
+                return true
+            }
+        }
+    })
+
+    return false
+}
+
+export function appendImportToFile(moduleName: string, specifiers: string[], ast: any): any {
+    const importModuleAST = ({
+        "type": "ImportDeclaration",
+        "source": {
+            "type": "Literal",
+            "value": moduleName,
+            "raw": `\"${moduleName}\"`,
+        },
+        "specifiers": specifiers.map(el => ({
+            "type": "ImportSpecifier",
+            "imported": {
+                "type": "Identifier",
+                "name": el,
+            },
+            "importKind": "value",
+        })),
+        "importKind": "value",
+        "assertions": [],
+    })
+
+    ast.body = [importModuleAST, ...ast.body]
+
+    return ast
+}
+
+const regMinus = /-/ig;
+const regRunes = /[\/\[\:]/ig;
+const replaceOpacity = /(?:\/\d{1,3}$)/ig;
+
+function convertFromString(classes: string): prettier.AST {
+    return {
+        type: 'JSXExpressionContainer',
+        expression: AppendMemberExpression(
+            extractVariantsAndElements(
+                classes.replace(regMinus, "_").split(" ")
+            )
+        ),
+    }
+}
+
+function AppendMemberExpression(classElements: Record<string, any>): any {
+    return renderElements(Object.entries(classElements))
+}
+
+function renderElements(elements: string[][]) {
+    let result;
+    while (elements.length > 0) {
+        // @ts-ignore
+        const [className, subClasses] = elements.shift()
+        switch (true) {
+            case subClasses === null:
+                result = renderEntry(parseElementName(className), result ?? parseElementName("tw"))
+                break
+            case subClasses !== null:
+                const attributes = className === "raw"
+                    ? renderLiteral(Object.keys(subClasses).join(" "))
+                    : renderElements(Object.entries(subClasses))
+
+                result = renderGroupEntry(parseElementName(className), result ?? parseElementName("tw"), attributes)
+                break
+            default:
+            // just skip generation of Node
+        }
+    }
+    return result
+}
+
+function renderLiteral(text: string) {
+    return {
+        type: "Literal",
+        value: text,
+        raw: `\"${text}\"`,
+    }
+}
+
+function renderEntry(property: prettier.AST, object: prettier.AST): prettier.AST {
+    return {
+        type: 'MemberExpression',
+        property,
+        object,
+    }
+}
+
+function renderGroupEntry(property: prettier.AST, object: prettier.AST, attributes: prettier.AST): prettier.AST {
+    return {
+        type: "CallExpression",
+        callee: {
+            type: 'MemberExpression',
+            property,
+            object
+        },
+        arguments: [attributes]
+    }
+}
+
+function parseElementName(name: string): prettier.AST {
+    if (!regRunes.test(name)) {
+        return {
+            type: "Identifier",
+            name: name
+        }
+    }
+    const opacityMatches = replaceOpacity.exec(name)
+    if (opacityMatches && opacityMatches.length > 0) {
+        name = `${opacityMatches.input.slice(0, opacityMatches.index)}$[${opacityMatches[0].slice(1)}]`
+    }
+    return {
+        type: "Identifier",
+        name: name.replace("[", "['").replace("]", "']")
+    }
+}
+
+const sortingByNameNull = (prev:any, next:any) => (Number(Boolean(prev[1])) + prev[0]).localeCompare(Number(Boolean(next[1])) + next[0])
+
+const extractVariantsAndElements = (classList: string[]) => {
+    let elements: Record<string, any> = {}
+    for (let el of classList) {
+        if (["group", "peer"].includes(el)) {
+            el = `raw:${el}`
+        }
+        let separatedClassList: string[] = el.split(":")
+
+
+        if (separatedClassList.length === 1) {
+            elements = {[separatedClassList[0]]: null, ...elements}
+            continue
+        }
+
+        separatedClassList = separatedClassList.reverse()
+        let path: string[] = [];
+        while (separatedClassList.length > 0) {
+            const lastOne = separatedClassList.pop() as string
+            path.push(lastOne)
+            const exists = dlv(elements, path)
+            if (exists) {
+                continue
+            }
+            if (separatedClassList.length > 0) {
+                dset(elements, path, {})
+                continue
+            }
+            dset(elements, path.slice(0, -1), {[lastOne]: null, ...dlv(elements, path.slice(0, -1))})
+        }
+    }
+
+    return Object.fromEntries(Object.entries(elements).sort(sortingByNameNull))
+}
+
 
 export const options = {
     tailwindConfig: {

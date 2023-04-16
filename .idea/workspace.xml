@@ -5,23 +5,11 @@
   </component>
   <component name="ChangeListManager">
     <list default="true" id="bb4f8575-892e-4e3b-ac6b-2889c2bec15f" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/.idea/vcs.xml" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/vite.config.ts" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/vitest.config.js" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.npmignore" beforeDir="false" afterPath="$PROJECT_DIR$/.npmignore" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/README.md" beforeDir="false" afterPath="$PROJECT_DIR$/README.md" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/package.json" beforeDir="false" afterPath="$PROJECT_DIR$/package.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/formatters/jsx.ts" beforeDir="false" />
       <change beforePath="$PROJECT_DIR$/src/index.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/index.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/parsers/index.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/parsers/typescript.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/tw-classes-converter.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/tw-classes-converter.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/ast_utils.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/ast_utils.ts" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/walker.ts" beforeDir="false" />
-      <change beforePath="$PROJECT_DIR$/test.js" beforeDir="false" afterPath="$PROJECT_DIR$/test.js" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/tsconfig.json" beforeDir="false" afterPath="$PROJECT_DIR$/tsconfig.json" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/yarn.lock" beforeDir="false" afterPath="$PROJECT_DIR$/yarn.lock" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/tw-classes-converter.ts" beforeDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/utils/ast_utils.ts" beforeDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />

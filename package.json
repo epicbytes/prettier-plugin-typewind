@@ -1,6 +1,6 @@
 {
   "name": "prettier-plugin-typewind",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Convert tailwind classes to typewind objects",
   "author": "Igor Kornelli <aztecsrv@gmail.com>",
   "homepage": "https://github.com/epicbytes/prettier-plugin-typewind",
@@ -22,7 +22,7 @@
   "private": false,
   "scripts": {
     "dev": "vite",
-    "build": "rimraf ./lib && tsc && vite build",
+    "build": "rimraf ./lib && tsc",
     "test": "vitest",
     "coverage": "vitest run --coverage"
   },
