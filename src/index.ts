@@ -13,6 +13,7 @@ import {generateRules as generateRulesFallback} from 'tailwindcss/lib/lib/genera
 import {createContext as createContextFallback} from 'tailwindcss/lib/lib/setupContextUtils'
 import loadConfigFallback from 'tailwindcss/loadConfig'
 import resolveConfigFallback from 'tailwindcss/resolveConfig'
+import {p} from "vitest/dist/types-e3c9754d";
 
 let base = getBasePlugins()
 
@@ -133,35 +134,17 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
 }
 
 function transformJavaScript(ast: prettier.AST) {
-
     visit(ast, {
+        CallExpression(node: prettier.AST) {
+            convertCVA(node)
+        },
         ImportDeclaration(node: prettier.AST) {
             if (node.importKind === "value" && node.source.value === "typewind") {
                 typewindImported = true
             }
         },
         JSXAttribute(node: prettier.AST) {
-            if (!node.value) {
-                return
-            }
-            if (['class', 'className', 'classList'].includes(node.name.name)) {
-                if (node.value.type === "Literal") {
-                    node.value = convertFromString(node.value.value)
-                    classesWasChanged = true
-                } else if (node.value.type === 'JSXExpressionContainer') {
-                    if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type)) {
-                        node.value = convertFromString(node.value.expression.value)
-                        classesWasChanged = true
-                    }
-                    /*visit(node.value, (node, parent, key) => {
-                        if (isStringLiteral(node)) {
-                            sortStringLiteral(node, { env })
-                        } else if (node.type === 'TemplateLiteral') {
-                            sortTemplateLiteral(node, { env })
-                        }
-                    })*/
-                }
-            }
+            convertJSX(node)
         }
     })
 }
@@ -174,6 +157,49 @@ function getBasePlugins(): { parsers: Record<string, prettier.Parser>, printers:
             __js_expression: prettierParserBabel.parsers.__js_expression,
         },
         printers: {},
+    }
+}
+
+function convertJSX(node:prettier.AST){
+    if (!node.value) {
+        return
+    }
+    if (['class', 'className', 'classList'].includes(node.name.name)) {
+        if (node.value.type === "Literal") {
+            node.value = convertFromString(node.value.value)
+            classesWasChanged = true
+        } else if (node.value.type === 'JSXExpressionContainer') {
+            if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type)) {
+                node.value = convertFromString(node.value.expression.value)
+                classesWasChanged = true
+            }
+        }
+    }
+}
+
+function convertCVA (node:prettier.AST){
+    if (node.callee.name === "cva") {
+        if (node.arguments[0].type === "Literal"){
+            node.arguments[0] = convertFromString(node.arguments[0].value).expression
+            classesWasChanged = true
+        }
+        visit(node, {
+            Property(node: prettier.AST) {
+                if (["intent", "size"].includes(node.key.name)) {
+                    visit(node, {
+                        ArrayExpression(nodeArray: prettier.AST) {
+                            nodeArray.elements = nodeArray.elements.map(nodeEl=>{
+                                if(nodeEl.type === "Literal") {
+                                    classesWasChanged = true
+                                    return convertFromString(nodeEl.value).expression
+                                }
+                                return nodeEl
+                            })
+                        }
+                    })
+                }
+            }
+        })
     }
 }
 
@@ -248,7 +274,7 @@ function visit(ast: prettier.AST, callbackMap: Record<string, any>) {
     }
 
     _visit(ast)
-    if (classesWasChanged && !typewindImported) {
+    if (classesWasChanged && !typewindImported && ast.body) {
         ast.body = appendImportToFile("typewind", ["tw"], ast)
     }
 }
@@ -363,7 +389,7 @@ function parseElementName(name: string): prettier.AST {
     }
 }
 
-function dlv(obj:Record<string, any>, key:string[]|string, def?, p?, undef?) {
+function dlv(obj: Record<string, any>, key: string[] | string, def?, p?, undef?) {
     if (typeof key === "string") {
         key = key.split ? key.split('.') : key;
     }
@@ -373,10 +399,10 @@ function dlv(obj:Record<string, any>, key:string[]|string, def?, p?, undef?) {
     return obj === undef ? def : obj;
 }
 
-function merge(a:any, b:any, k?:any) {
+function merge(a: any, b: any, k?: any) {
     if (typeof a === 'object' && typeof b === 'object') {
         if (Array.isArray(a) && Array.isArray(b)) {
-            for (k=0; k < b.length; k++) {
+            for (k = 0; k < b.length; k++) {
                 a[k] = merge(a[k], b[k]);
             }
         } else {
@@ -393,12 +419,12 @@ function merge(a:any, b:any, k?:any) {
 function dset<T extends object, V>(obj: T, keys: string | ArrayLike<string | number>, value: V): void;
 
 function dset(obj, keys, val) {
-    keys.split && (keys=keys.split('.'));
-    var i=0, l=keys.length, t=obj, x, k;
+    keys.split && (keys = keys.split('.'));
+    var i = 0, l = keys.length, t = obj, x, k;
     while (i < l) {
         k = keys[i++];
         if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
-        t = t[k] = (i === l) ? merge(t[k],val) : (typeof(x=t[k])===typeof keys) ? x : (keys[i]*0 !== 0 || !!~(''+keys[i]).indexOf('.')) ? {} : [];
+        t = t[k] = (i === l) ? merge(t[k], val) : (typeof (x = t[k]) === typeof keys) ? x : (keys[i] * 0 !== 0 || !!~('' + keys[i]).indexOf('.')) ? {} : [];
     }
 }
 

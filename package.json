@@ -1,6 +1,6 @@
 {
   "name": "prettier-plugin-typewind",
-  "version": "0.0.5",
+  "version": "0.0.6",
   "description": "Convert tailwind classes to typewind objects",
   "author": "Igor Kornelli <aztecsrv@gmail.com>",
   "homepage": "https://github.com/epicbytes/prettier-plugin-typewind",

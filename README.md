@@ -1,5 +1,6 @@
 # Plugin for converting string classes to object classes
-## Attention! This is a test solution, not ready for production.
+### Attention! This is a test solution, not ready for production.
+But works fine, but does not exclude bugs
 
 ## Installation
 
@@ -35,3 +36,22 @@ module.exports = {
   tailwindConfig: './styles/tailwind.config.js',
 }
 ```
+
+## Use
+You can use it for example like this:
+
+- in package.json
+```json
+{
+  "scripts":{
+    "pret": "prettier --write ./src"
+  }
+}
+```
+
+## What can be converted
+- [x] JSX classes from [\*.jsx,\*.tsx] - class, className, classList
+- [x] Class Variance Authority from [\*.ts,\*.tsx] - base class, intents, sizes
+- [ ] Support for not only Tailwind classes, also take custom classes and put it in ```raw()```
+- [ ] Modules like Classnames or clsx
+- [ ] TWIN.macro
