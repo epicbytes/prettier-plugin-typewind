@@ -2,6 +2,167 @@
 ### Attention! This is a test solution, not ready for production.
 But works fine, but does not exclude bugs
 
+## Introduction
+This plugin is designed to simplify development using typewind, which makes it possible to type component classes.
+
+In the development process, you inevitably encounter the need for uniformity in the code, uniformity in approaches. But transferring strings into objects by hand is time consuming.
+
+A plugin has been written to help with this.
+
+For example:
+
+So exists code with include class-variance-authority module code like this
+```js
+const button = cva("button", {
+  variants: {
+    intent: {
+      primary: [
+        "bg-blue-500",
+        "text-white",
+        "border-transparent",
+        "hover:bg-blue-600",
+      ],
+      secondary: [
+        "bg-white",
+        "text-gray-800",
+        "border-gray-400",
+        "hover:bg-gray-100",
+      ],
+    },
+    size: {
+      small: ["text-sm", "py-1", "px-2"],
+      medium: ["text-base", "py-2", "px-4"],
+    },
+  },
+  compoundVariants: [{ intent: "primary", size: "medium", class: "uppercase" }],
+  defaultVariants: {
+    intent: "primary",
+    size: "medium",
+  },
+});
+```
+
+Will be converted to this:
+
+```js
+const button = cva(tw.button, {
+  variants: {
+    intent: {
+      primary: [
+        tw.bg_blue_500,
+        tw.text_white,
+        tw.border_transparent,
+        tw.hover(tw.bg_blue_600),
+      ],
+      secondary: [
+        tw.bg_white,
+        tw.text_gray_800,
+        tw.border_gray_400,
+        tw.hover(tw.bg_gray_100),
+      ],
+    },
+    size: {
+      small: [tw.text_sm, tw.py_1, tw.px_2],
+      medium: [tw.text_base, tw.py_2, tw.px_4],
+    },
+  },
+  compoundVariants: [{ intent: "primary", size: "medium", class: "uppercase" }],
+  defaultVariants: {
+    intent: "primary",
+    size: "medium",
+  },
+});
+
+```
+Exists code writen in JSX style
+```jsx
+return (
+    <div class={"flex space-x-2 justify-end"}>
+      <Switch>
+        <Match when={!requested()}>
+          <button
+            class={"btn btn-error btn-outline btn-sm normal-case"}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(true);
+            }}
+          >
+            {buttonTitle}
+          </button>
+        </Match>
+        <Match when={requested()}>
+          <button
+            class={"btn btn-sm btn-outline hover:btn-ghost md:hover:btn-warning normal-case"}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(false);
+              onAcceptClick && onAcceptClick();
+            }}
+          >
+            yes
+          </button>
+          <button
+            class={"btn btn-sm btn-outline normal-case"}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(false);
+              onDeclineClick && onDeclineClick();
+            }}
+          >
+            no
+          </button>
+        </Match>
+      </Switch>
+    </div>
+  );
+```
+will be converted to:
+
+```jsx
+return (
+    <div class={tw.flex.justify_end.space_x_2}>
+      <Switch>
+        <Match when={!requested()}>
+          <button
+            class={tw.btn.btn_error.btn_outline.btn_sm.normal_case}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(true);
+            }}
+          >
+            {buttonTitle}
+          </button>
+        </Match>
+        <Match when={requested()}>
+          <button
+            class={tw.btn.btn_outline.btn_sm.normal_case
+              .hover(tw.btn_ghost)
+              .md(tw.hover(tw.btn_warning))}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(false);
+              onAcceptClick && onAcceptClick();
+            }}
+          >
+            yes
+          </button>
+          <button
+            class={tw.btn.btn_outline.btn_sm.normal_case}
+            onClick={(event) => {
+              event.preventDefault();
+              setRequested(false);
+              onDeclineClick && onDeclineClick();
+            }}
+          >
+            no
+          </button>
+        </Match>
+      </Switch>
+    </div>
+  );
+
+```
+
 ## Installation
 
 To get started, just install `prettier-plugin-tailwindcss` as a dev-dependency:
@@ -52,6 +213,7 @@ You can use it for example like this:
 ## What can be converted
 - [x] JSX classes from [\*.jsx,\*.tsx] - class, className, classList
 - [x] Class Variance Authority from [\*.ts,\*.tsx] - base class, intents, sizes
+- [ ] Support sorting classes like in prettier-plugin-tailwindcss
 - [ ] Support for not only Tailwind classes, also take custom classes and put it in ```raw()```
 - [ ] Modules like Classnames or clsx
 - [ ] TWIN.macro

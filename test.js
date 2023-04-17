@@ -20,7 +20,7 @@ export function PromptButton({
       <Switch>
         <Match when={!requested()}>
           <button
-            class={tw.btn.btn_error.btn_outline.btn_sm.normal_case}
+            class={"btn btn-error btn-outline btn-sm normal-case"}
             onClick={(event) => {
               event.preventDefault();
               setRequested(true);
@@ -31,7 +31,7 @@ export function PromptButton({
         </Match>
         <Match when={requested()}>
           <button
-            class={"btn btn-sm btn-outline btn-warning normal-case"}
+            class={"btn btn-sm btn-outline hover:btn-ghost md:hover:btn-warning normal-case"}
             onClick={(event) => {
               event.preventDefault();
               setRequested(false);
@@ -65,7 +65,7 @@ const button = cva("button", {
     intent: {
       primary: [
         "bg-blue-500",
-        tw.text_white,
+        "text-white",
         "border-transparent",
         "hover:bg-blue-600",
       ],
@@ -99,7 +99,7 @@ export const Button: React.FC<ButtonProps> = ({
   ...props
 }) => <button className={button({ intent, size, className })} {...props} />;`
 
-const output = prettier.format(codeCVA, {
+const output = prettier.format(code, {
   parser: 'typescript',
   pluginSearchDirs: ['./'],
   plugins: ['./prettier-plugin-typewind'],
