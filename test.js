@@ -16,11 +16,14 @@ export function PromptButton({
                              }: PromptButtonProps) {
   const [requested, setRequested] = createSignal(false);
   return (
-    <div class={"flex space-x-2 justify-end"}>
+    <div class={"@flex space-x-2 [&:nth-child(3)]:justify-end [&:nth-child(3)]:justify-between"}>
+    <span class="">ddd</span>
+    <span class={""}>asd</span>
+    <span class={tw.variant('&:nth-child(3)', tw.underline)}></span>
       <Switch>
         <Match when={!requested()}>
           <button
-            class={"btn btn-error btn-outline btn-sm normal-case"}
+            class={"btn btn-error btn-outline -mb-4 btn-sm !z-[10] !normal-case"}
             onClick={(event) => {
               event.preventDefault();
               setRequested(true);

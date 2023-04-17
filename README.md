@@ -213,7 +213,8 @@ You can use it for example like this:
 ## What can be converted
 - [x] JSX classes from [\*.jsx,\*.tsx] - class, className, classList
 - [x] Class Variance Authority from [\*.ts,\*.tsx] - base class, intents, sizes
-- [ ] Support sorting classes like in prettier-plugin-tailwindcss
+- [x] Variants, Importants, Arbitrary groups
+- [x] Support sorting classes like in prettier-plugin-tailwindcss
 - [ ] Support for not only Tailwind classes, also take custom classes and put it in ```raw()```
 - [ ] Modules like Classnames or clsx
 - [ ] TWIN.macro

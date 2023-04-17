@@ -13,7 +13,7 @@ import {generateRules as generateRulesFallback} from 'tailwindcss/lib/lib/genera
 import {createContext as createContextFallback} from 'tailwindcss/lib/lib/setupContextUtils'
 import loadConfigFallback from 'tailwindcss/loadConfig'
 import resolveConfigFallback from 'tailwindcss/resolveConfig'
-import {p} from "vitest/dist/types-e3c9754d";
+import * as ts from "typescript"
 
 let base = getBasePlugins()
 
@@ -21,20 +21,18 @@ let contextMap = new Map()
 let typewindImported = false;
 let classesWasChanged = false;
 
-function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
+function createParser(parserFormat: string, transform: prettier.BuiltInParser): prettier.Parser {
     return {
         ...base.parsers[parserFormat],
-        preprocess(code: any, options: any) {
-            let original = getCompatibleParser(parserFormat, options)
+        preprocess(code, options) {
+            let original = getCompatibleParser(parserFormat, {...options, tokens: false})
 
             if (original.preprocess) {
                 return original.preprocess(code, options)
             }
-
             return code
         },
-
-        parse(text: string, parsers: any, options: any = {}) {
+        parse(text, parsers, options) {
             let original = getCompatibleParser(parserFormat, options)
 
             let ast = original.parse(text, parsers, options)
@@ -48,7 +46,7 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
             let baseDir
             let prettierConfigPath = prettier.resolveConfigFile.sync(options.filepath)
 
-            if (options.tailwindConfig) {
+            if (options['tailwindConfig']) {
                 baseDir = prettierConfigPath
                     ? path.dirname(prettierConfigPath)
                     : process.cwd()
@@ -80,8 +78,8 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
             } catch {
             }
 
-            if (options.tailwindConfig) {
-                tailwindConfigPath = path.resolve(baseDir, options.tailwindConfig)
+            if (options['tailwindConfig']) {
+                tailwindConfigPath = path.resolve(baseDir, options['tailwindConfig'])
                 clearModule(tailwindConfigPath)
                 const loadedConfig = loadConfig(tailwindConfigPath)
                 tailwindConfig = loadedConfig.default ?? loadedConfig
@@ -133,8 +131,8 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
     }
 }
 
-function emptyLiteral(value: string) {
-    return Boolean(value.match(/^\s*$/))
+function isEmptyLiteral(value?: string) {
+    return Boolean(value?.match(/^\s*$/))
 }
 
 function transformJavaScript(ast: prettier.AST) {
@@ -142,7 +140,7 @@ function transformJavaScript(ast: prettier.AST) {
         CallExpression(node: prettier.AST) {
             convertCVA(node)
         },
-        ImportDeclaration(node: prettier.AST) {
+        ImportDeclaration(node: prettier.AST, parent) {
             if (node.importKind === "value" && node.source.value === "typewind") {
                 typewindImported = true
             }
@@ -164,27 +162,38 @@ function getBasePlugins(): { parsers: Record<string, prettier.Parser>, printers:
     }
 }
 
-function convertJSX(node:prettier.AST){
-    if (!node.value) {
+function convertJSX(node: prettier.AST) {
+    if (!node.value || typeof node.value === "undefined") {
         return
     }
     if (['class', 'className', 'classList'].includes(node.name.name)) {
-        if (node.value.type === "Literal" && !emptyLiteral(node.value.value)) {
-            node.value = convertFromString(node.value.value)
-            classesWasChanged = true
-        } else if (node.value.type === 'JSXExpressionContainer') {
-            const isEmpty = node.value?.expression?.value && emptyLiteral(node.value?.expression?.value)
-            if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type) && !isEmpty) {
-                node.value = convertFromString(node.value.expression.value)
-                classesWasChanged = true
-            }
+        let isEmpty = false
+        switch (true) {
+            case node.value.type === "Literal" && !isEmptyLiteral(node.value.value):
+                isEmpty = node.value?.value && isEmptyLiteral(node.value?.value)
+                if (!isEmpty) {
+                    node.value = convertFromString(node.value.value)
+                    classesWasChanged = true
+                }
+                break
+            case node.value.type === 'JSXExpressionContainer':
+                if (isEmptyLiteral(node.value?.expression?.value)) {
+                    break
+                }
+                if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type)) {
+                    node.value = convertFromString(node.value.expression.value)
+                    classesWasChanged = true
+                }
+                break
+            default:
+                node.value = renderLiteral("")
         }
     }
 }
 
-function convertCVA (node:prettier.AST){
+function convertCVA(node: prettier.AST) {
     if (node.callee.name === "cva") {
-        if (node.arguments[0].type === "Literal" && !emptyLiteral(node.arguments[0].value)){
+        if (node.arguments[0].type === "Literal" && !isEmptyLiteral(node.arguments[0].value)) {
             node.arguments[0] = convertFromString(node.arguments[0].value).expression
             classesWasChanged = true
         }
@@ -193,8 +202,8 @@ function convertCVA (node:prettier.AST){
                 if (["intent", "size"].includes(node.key.name)) {
                     visit(node, {
                         ArrayExpression(nodeArray: prettier.AST) {
-                            nodeArray.elements = nodeArray.elements.map(nodeEl=>{
-                                if(nodeEl.type === "Literal") {
+                            nodeArray.elements = nodeArray.elements.map(nodeEl => {
+                                if (nodeEl.type === "Literal") {
                                     classesWasChanged = true
                                     return convertFromString(nodeEl.value).expression
                                 }
@@ -208,7 +217,7 @@ function convertCVA (node:prettier.AST){
     }
 }
 
-function getCompatibleParser(parserFormat: string, options: { plugins: Record<string, any>[] }) {
+function getCompatibleParser(parserFormat, options) {
     if (!options.plugins) {
         return base.parsers[parserFormat]
     }
@@ -285,7 +294,7 @@ function visit(ast: prettier.AST, callbackMap: Record<string, any>) {
 }
 
 export function appendImportToFile(moduleName: string, specifiers: string[], ast: any): any {
-    const importModuleAST = ({
+    const importDeclaration = ({
         "type": "ImportDeclaration",
         "source": {
             "type": "Literal",
@@ -304,19 +313,20 @@ export function appendImportToFile(moduleName: string, specifiers: string[], ast
         "assertions": [],
     })
 
-    return [importModuleAST, ...ast.body]
+    return [importDeclaration, ...ast.body]
 }
 
-const regMinus = /-/ig;
-const regRunes = /[\/\[\:]/ig;
-const replaceOpacity = /(?:\/\d{1,3}$)/ig;
+const regMinusRx = /-/ig;
+const regRunesRx = /[\/\[\:]/ig;
+const replaceOpacityRx = /(?:\/\d{1,3}$)/ig;
+const getVariantRx = /^\[(.*)\]\:/ig;
 
 function convertFromString(classes: string): prettier.AST {
     return {
         type: 'JSXExpressionContainer',
         expression: AppendMemberExpression(
             extractVariantsAndElements(
-                classes.replace(regMinus, "_").split(" ")
+                classes.replace(regMinusRx, "_").split(" ")
             )
         ),
     }
@@ -330,17 +340,25 @@ function renderElements(elements: string[][]) {
     let result;
     while (elements.length > 0) {
         // @ts-ignore
-        const [className, subClasses] = elements.shift()
+        let [className, subClasses] = elements.shift()
         switch (true) {
             case subClasses === null:
                 result = renderEntry(parseElementName(className), result ?? parseElementName("tw"))
                 break
             case subClasses !== null:
-                const attributes = className === "raw"
-                    ? renderLiteral(Object.keys(subClasses).join(" "))
-                    : renderElements(Object.entries(subClasses))
+                subClasses = Object.entries(subClasses).sort(sortingByNameNull)
+                switch (className) {
+                    case "variant":
+                        result = renderVariantEntry(parseElementName(className), result ?? parseElementName("tw"), subClasses)
+                        break
+                    case "raw":
+                    default:
+                        const attributes = className === "raw"
+                            ? renderLiteral(Object.keys(subClasses).join(" "))
+                            : renderElements(subClasses)
 
-                result = renderGroupEntry(parseElementName(className), result ?? parseElementName("tw"), attributes)
+                        result = renderGroupEntry(parseElementName(className), result ?? parseElementName("tw"), attributes)
+                }
                 break
             default:
             // just skip generation of Node
@@ -350,11 +368,7 @@ function renderElements(elements: string[][]) {
 }
 
 function renderLiteral(text: string) {
-    return {
-        type: "Literal",
-        value: text,
-        raw: `\"${text}\"`,
-    }
+    return ts.factory.createStringLiteral(text).text
 }
 
 function renderEntry(property: prettier.AST, object: prettier.AST): prettier.AST {
@@ -362,6 +376,19 @@ function renderEntry(property: prettier.AST, object: prettier.AST): prettier.AST
         type: 'MemberExpression',
         property,
         object,
+    }
+}
+
+function renderVariantEntry(property: prettier.AST, object: prettier.AST, subclasses: prettier.AST): prettier.AST {
+    const [[variantRule, subClasses]] = subclasses
+    return {
+        type: "CallExpression",
+        callee: {
+            type: 'MemberExpression',
+            property,
+            object
+        },
+        arguments: [renderLiteral(`"${variantRule.replace("..",":")}"`), renderElements(Object.entries(subClasses as Record<string, any>).sort(sortingByNameNull))]
     }
 }
 
@@ -378,20 +405,14 @@ function renderGroupEntry(property: prettier.AST, object: prettier.AST, attribut
 }
 
 function parseElementName(name: string): prettier.AST {
-    if (!regRunes.test(name)) {
-        return {
-            type: "Identifier",
-            name: name
-        }
+    if (!regRunesRx.test(name)) {
+        return ts.factory.createIdentifier(name).text
     }
-    const opacityMatches = replaceOpacity.exec(name)
+    const opacityMatches = replaceOpacityRx.exec(name)
     if (opacityMatches && opacityMatches.length > 0) {
         name = `${opacityMatches.input.slice(0, opacityMatches.index)}$[${opacityMatches[0].slice(1)}]`
     }
-    return {
-        type: "Identifier",
-        name: name.replace("[", "['").replace("]", "']")
-    }
+    return ts.factory.createIdentifier(name.replace("[", "['").replace("]", "']")).text
 }
 
 function dlv(obj: Record<string, any>, key: string[] | string, def?, p?, undef?) {
@@ -425,7 +446,7 @@ function dset<T extends object, V>(obj: T, keys: string | ArrayLike<string | num
 
 function dset(obj, keys, val) {
     keys.split && (keys = keys.split('.'));
-    var i = 0, l = keys.length, t = obj, x, k;
+    let i = 0, l = keys.length, t = obj, x, k;
     while (i < l) {
         k = keys[i++];
         if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
@@ -438,21 +459,35 @@ const sortingByNameNull = (prev: any, next: any) => (Number(Boolean(prev[1])) + 
 const extractVariantsAndElements = (classList: string[]) => {
     let elements: Record<string, any> = {}
     for (let el of classList) {
-        if (["group", "peer"].includes(el)) {
-            el = `raw:${el}`
+        switch (true) {
+            case ["group", "peer"].includes(el) :
+                el = `raw:${el}`
+                break
+            case (el.startsWith("!")):
+                el = `important:${el.slice(1)}`
+                break
+            case el.startsWith("@"):
+                el = `$${el.slice(1)}`
+                break
+            case el.startsWith("["):
+                const variantRule = getVariantRx.exec(el)
+                if (Boolean(variantRule?.[1])) {
+                    el = el.replace(getVariantRx, `[${variantRule?.[1].replace(":", "..")}]:`)
+                }
+                el = `variant:${el}`
+                break
         }
         let separatedClassList: string[] = el.split(":")
-
 
         if (separatedClassList.length === 1) {
             elements = {[separatedClassList[0]]: null, ...elements}
             continue
         }
 
-        separatedClassList = separatedClassList.reverse()
         let path: string[] = [];
         while (separatedClassList.length > 0) {
-            const lastOne = separatedClassList.pop() as string
+            let lastOne = separatedClassList.shift() as string
+
             path.push(lastOne)
             const exists = dlv(elements, path)
             if (exists) {
@@ -469,7 +504,6 @@ const extractVariantsAndElements = (classList: string[]) => {
     return Object.fromEntries(Object.entries(elements).sort(sortingByNameNull))
 }
 
-
 export const options = {
     tailwindConfig: {
         type: 'string',
@@ -480,7 +514,7 @@ export const options = {
 
 export const printers: Record<string, prettier.Printer> = {}
 
-export const parsers = {
+export const parsers: Record<string, prettier.Parser> = {
     babel: createParser('babel', transformJavaScript),
     typescript: createParser('typescript', transformJavaScript),
     'babel-ts': createParser('babel-ts', transformJavaScript),
