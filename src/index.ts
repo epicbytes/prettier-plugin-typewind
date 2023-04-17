@@ -133,6 +133,10 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser) {
     }
 }
 
+function emptyLiteral(value: string) {
+    return Boolean(value.match(/^\s*$/))
+}
+
 function transformJavaScript(ast: prettier.AST) {
     visit(ast, {
         CallExpression(node: prettier.AST) {
@@ -165,11 +169,12 @@ function convertJSX(node:prettier.AST){
         return
     }
     if (['class', 'className', 'classList'].includes(node.name.name)) {
-        if (node.value.type === "Literal") {
+        if (node.value.type === "Literal" && !emptyLiteral(node.value.value)) {
             node.value = convertFromString(node.value.value)
             classesWasChanged = true
         } else if (node.value.type === 'JSXExpressionContainer') {
-            if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type)) {
+            const isEmpty = node.value?.expression?.value && emptyLiteral(node.value?.expression?.value)
+            if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type) && !isEmpty) {
                 node.value = convertFromString(node.value.expression.value)
                 classesWasChanged = true
             }
@@ -179,7 +184,7 @@ function convertJSX(node:prettier.AST){
 
 function convertCVA (node:prettier.AST){
     if (node.callee.name === "cva") {
-        if (node.arguments[0].type === "Literal"){
+        if (node.arguments[0].type === "Literal" && !emptyLiteral(node.arguments[0].value)){
             node.arguments[0] = convertFromString(node.arguments[0].value).expression
             classesWasChanged = true
         }
