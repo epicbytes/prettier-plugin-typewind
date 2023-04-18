@@ -17,8 +17,14 @@ export function PromptButton({
   const [requested, setRequested] = createSignal(false);
   return (
     <div class={"@flex space-x-2 [&:nth-child(3)]:justify-end [&:nth-child(3)]:justify-between"}>
-    <span class="">ddd</span>
+    <span className={cx(
+        "relative",
+        "h-max w-max",
+        "self-center justify-self-center",
+        "[&_:where(th,td)]:p-2"
+      )}>ddd</span>
     <span class={""}>asd</span>
+    <span class={tw.raw("test-class")}>asd</span>
     <span class={tw.variant('&:nth-child(3)', tw.underline)}></span>
       <Switch>
         <Match when={!requested()}>
@@ -101,11 +107,24 @@ export const Button: React.FC<ButtonProps> = ({
   size,
   ...props
 }) => <button className={button({ intent, size, className })} {...props} />;`
+const codecx = `<div>
+<span className={cx(
+        "relative",
+        "h-max w-max",
+        "self-center justify-self-center",
+        "[&_:where(th,td)]:p-2"
+      )}>ddd</span>
+      <span className={classNames({
+      [tw.btn2]:true,
+      btn: true,
+      'btn-pressed btn-super': this.state.isPressed,
+      'btn-over': !this.state.isPressed && this.state.isHovered
+    })}>oo</span></div>`
 
 const output = prettier.format(code, {
   parser: 'typescript',
   pluginSearchDirs: ['./'],
-  plugins: ['./prettier-plugin-typewind'],
+  plugins: ['./dist/index.js'],
 })
 
 console.log(output)

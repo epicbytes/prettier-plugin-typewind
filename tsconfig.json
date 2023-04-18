@@ -8,7 +8,8 @@
 		"module": "commonjs",
 		"outDir": "lib",
 		"moduleResolution": "node",
-		"noImplicitAny": false
+		"noImplicitAny": false,
+		"types": ["vitest/globals","vitest/importMeta"]
 	},
 	"include": ["src"],
 	"exclude": ["lib", "node_modules"]

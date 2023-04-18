@@ -21,6 +21,203 @@ let contextMap = new Map()
 let typewindImported = false;
 let classesWasChanged = false;
 
+function convertJSX(node: prettier.AST) {
+    if (!node.value || typeof node.value === "undefined") {
+        return
+    }
+    if (['class', 'className', 'classList'].includes(node.name.name)) {
+        switch (true) {
+            case node.value.expression?.type === "CallExpression":
+                if (["CallExpression"].includes(node.value?.expression?.type)) {
+                    if (node.value?.expression?.callee?.type !== "MemberExpression") {
+                        convertFunctionExpression(node)
+                    }
+                }
+                break;
+            case node.value.type === "Literal" && !isEmptyLiteral(node.value.value):
+                node.value = convertFromString(node.value.value)
+                break
+            case node.value.type === 'JSXExpressionContainer':
+                switch (true) {
+                    case isEmptyLiteral(node.value?.expression?.value):
+                        break
+                    case ["CallExpression"].includes(node.value?.expression?.type):
+                        convertFunctionExpression(node)
+                        break
+                    case ["ObjectExpression"].includes(node.value?.expression?.type):
+                        break
+                    case ["MemberExpression"].includes(node.value?.expression?.type):
+                        break
+                    default:
+                        node.value = convertFromString(node.value.expression.value)
+                }
+                break
+            default:
+                node.value = renderLiteral("")
+        }
+    }
+}
+
+function convertFunctionExpression(node: prettier.AST) {
+    for (let index in node.value.expression.arguments) {
+        if (node.value.expression.arguments[index].type === "Literal") {
+            node.value.expression.arguments[index] = convertFromString(node.value.expression.arguments[index].value).expression
+        }
+    }
+    visit(node.value.expression.arguments, {
+        Property(nodeEl: prettier.AST) {
+            if (["Literal", "Identifier"].includes(nodeEl.key.type)) {
+                nodeEl.key.type = "ArrayExpression"
+                nodeEl.key.elements = [convertFromString(nodeEl.key.value || nodeEl.key.name).expression]
+            }
+        }
+    })
+}
+
+function convertCVA(node: prettier.AST) {
+    if (node.callee.name === "cva") {
+        if (node.arguments[0].type === "Literal" && !isEmptyLiteral(node.arguments[0].value)) {
+            node.arguments[0] = convertFromString(node.arguments[0].value).expression
+        }
+        visit(node.arguments[1], {
+            Property(node: prettier.AST) {
+                if (["variants"].includes(node.key.name)) {
+                    visit(node, {
+                        ArrayExpression(nodeArray: prettier.AST) {
+                            nodeArray.elements = nodeArray.elements.sort(sortingNodeByValue).map(nodeEl => {
+                                if (nodeEl.type === "Literal") {
+                                    return convertFromString(nodeEl.value).expression
+                                }
+                                return nodeEl
+                            })
+                        }
+                    })
+                }
+            }
+        })
+    }
+}
+
+function getCompatibleParser(parserFormat, options) {
+    if (!options.plugins) {
+        return base.parsers[parserFormat]
+    }
+
+    let parser = {
+        ...base.parsers[parserFormat],
+    }
+
+    // Now load parsers from plugins
+    let compatiblePlugins = [
+        '@ianvs/prettier-plugin-sort-imports',
+        '@trivago/prettier-plugin-sort-imports',
+        'prettier-plugin-import-sort',
+        'prettier-plugin-organize-attributes',
+        'prettier-plugin-style-order',
+    ]
+
+    for (const name of compatiblePlugins) {
+        let path: string | null = null
+
+        try {
+            path = require.resolve(name)
+        } catch (err) {
+            continue
+        }
+
+        let plugin = options.plugins.find(
+            (plugin) => plugin.name === name || plugin.name === path,
+        )
+
+        // The plugin is not loaded
+        if (!plugin) {
+            continue
+        }
+
+        Object.assign(parser, plugin.parsers[parserFormat])
+    }
+
+    return parser
+}
+
+function visit(ast: prettier.AST, callbackMap: Record<string, any>) {
+    function _visit(node: prettier.AST, parent?: prettier.AST, key?: string, index?: number, meta: Record<string, any> = {}) {
+        if (typeof callbackMap === 'function') {
+            if (callbackMap(node, parent, key, index, meta) === false) {
+                return
+            }
+        } else if (node.type in callbackMap) {
+            if (callbackMap[node.type](node, parent, key, index, meta) === false) {
+                return
+            }
+        }
+
+        const keys = Object.keys(node)
+        for (let i = 0; i < keys.length; i++) {
+            const child = node[keys[i]]
+            if (Array.isArray(child)) {
+                for (let j = 0; j < child.length; j++) {
+                    if (child[j] !== null) {
+                        _visit(child[j], node, keys[i], j, {...meta})
+                    }
+                }
+            } else if (typeof child?.type === 'string') {
+                _visit(child, node, keys[i], i, {...meta})
+            }
+        }
+
+    }
+
+    _visit(ast)
+    if (classesWasChanged && !typewindImported && ast.body) {
+        ast.body = appendImportToFile("typewind", ["tw"], ast)
+    }
+}
+
+function appendImportToFile(moduleName: string, specifiers: string[], ast: any): any {
+    const importDeclaration = ({
+        "type": "ImportDeclaration",
+        "source": {
+            "type": "Literal",
+            "value": moduleName,
+            "raw": `\"${moduleName}\"`,
+        },
+        "specifiers": specifiers.map(el => ({
+            "type": "ImportSpecifier",
+            "imported": {
+                "type": "Identifier",
+                "name": el,
+            },
+            "importKind": "value",
+        })),
+        "importKind": "value",
+        "assertions": [],
+    })
+
+    return [importDeclaration, ...ast.body]
+}
+
+const regMinusRx = /-/ig;
+const regRunesRx = /[\/\[\:]/ig;
+const replaceOpacityRx = /(?:\/\d{1,3}$)/ig;
+const getVariantRx = /^\[(.*)\]\:/ig;
+
+function convertFromString(classes: string): prettier.AST {
+    classesWasChanged = true
+    return {
+        type: 'JSXExpressionContainer',
+        expression: AppendMemberExpression(
+            extractVariantsAndElements(
+                classes?.replace(regMinusRx, "_").split(" ")
+            )
+        ),
+    }
+}
+
+function AppendMemberExpression(classElements: Record<string, any>): any {
+    return renderElements(Object.entries(classElements))
+}
+
 function createParser(parserFormat: string, transform: prettier.BuiltInParser): prettier.Parser {
     return {
         ...base.parsers[parserFormat],
@@ -131,8 +328,8 @@ function createParser(parserFormat: string, transform: prettier.BuiltInParser): 
     }
 }
 
-function isEmptyLiteral(value?: string) {
-    return Boolean(value?.match(/^\s*$/))
+function isEmptyLiteral(value?: string): boolean {
+    return !Boolean(value) || Boolean(value?.match(/^\s*$/))
 }
 
 function transformJavaScript(ast: prettier.AST) {
@@ -160,180 +357,6 @@ function getBasePlugins(): { parsers: Record<string, prettier.Parser>, printers:
         },
         printers: {},
     }
-}
-
-function convertJSX(node: prettier.AST) {
-    if (!node.value || typeof node.value === "undefined") {
-        return
-    }
-    if (['class', 'className', 'classList'].includes(node.name.name)) {
-        let isEmpty = false
-        switch (true) {
-            case node.value.type === "Literal" && !isEmptyLiteral(node.value.value):
-                isEmpty = node.value?.value && isEmptyLiteral(node.value?.value)
-                if (!isEmpty) {
-                    node.value = convertFromString(node.value.value)
-                    classesWasChanged = true
-                }
-                break
-            case node.value.type === 'JSXExpressionContainer':
-                if (isEmptyLiteral(node.value?.expression?.value)) {
-                    break
-                }
-                if (!["CallExpression", "ObjectExpression", "MemberExpression"].includes(node.value?.expression?.type)) {
-                    node.value = convertFromString(node.value.expression.value)
-                    classesWasChanged = true
-                }
-                break
-            default:
-                node.value = renderLiteral("")
-        }
-    }
-}
-
-function convertCVA(node: prettier.AST) {
-    if (node.callee.name === "cva") {
-        if (node.arguments[0].type === "Literal" && !isEmptyLiteral(node.arguments[0].value)) {
-            node.arguments[0] = convertFromString(node.arguments[0].value).expression
-            classesWasChanged = true
-        }
-        visit(node, {
-            Property(node: prettier.AST) {
-                if (["intent", "size"].includes(node.key.name)) {
-                    visit(node, {
-                        ArrayExpression(nodeArray: prettier.AST) {
-                            nodeArray.elements = nodeArray.elements.map(nodeEl => {
-                                if (nodeEl.type === "Literal") {
-                                    classesWasChanged = true
-                                    return convertFromString(nodeEl.value).expression
-                                }
-                                return nodeEl
-                            })
-                        }
-                    })
-                }
-            }
-        })
-    }
-}
-
-function getCompatibleParser(parserFormat, options) {
-    if (!options.plugins) {
-        return base.parsers[parserFormat]
-    }
-
-    let parser = {
-        ...base.parsers[parserFormat],
-    }
-
-    // Now load parsers from plugins
-    let compatiblePlugins = [
-        '@ianvs/prettier-plugin-sort-imports',
-        '@trivago/prettier-plugin-sort-imports',
-        'prettier-plugin-import-sort',
-        'prettier-plugin-organize-attributes',
-        'prettier-plugin-style-order',
-    ]
-
-    for (const name of compatiblePlugins) {
-        let path: string | null = null
-
-        try {
-            path = require.resolve(name)
-        } catch (err) {
-            continue
-        }
-
-        let plugin = options.plugins.find(
-            (plugin) => plugin.name === name || plugin.name === path,
-        )
-
-        // The plugin is not loaded
-        if (!plugin) {
-            continue
-        }
-
-        Object.assign(parser, plugin.parsers[parserFormat])
-    }
-
-    return parser
-}
-
-function visit(ast: prettier.AST, callbackMap: Record<string, any>) {
-    function _visit(node: prettier.AST, parent?: prettier.AST, key?: string, index?: number, meta: Record<string, any> = {}) {
-        if (typeof callbackMap === 'function') {
-            if (callbackMap(node, parent, key, index, meta) === false) {
-                return
-            }
-        } else if (node.type in callbackMap) {
-            if (callbackMap[node.type](node, parent, key, index, meta) === false) {
-                return
-            }
-        }
-
-        const keys = Object.keys(node)
-        for (let i = 0; i < keys.length; i++) {
-            const child = node[keys[i]]
-            if (Array.isArray(child)) {
-                for (let j = 0; j < child.length; j++) {
-                    if (child[j] !== null) {
-                        _visit(child[j], node, keys[i], j, {...meta})
-                    }
-                }
-            } else if (typeof child?.type === 'string') {
-                _visit(child, node, keys[i], i, {...meta})
-            }
-        }
-
-    }
-
-    _visit(ast)
-    if (classesWasChanged && !typewindImported && ast.body) {
-        ast.body = appendImportToFile("typewind", ["tw"], ast)
-    }
-}
-
-export function appendImportToFile(moduleName: string, specifiers: string[], ast: any): any {
-    const importDeclaration = ({
-        "type": "ImportDeclaration",
-        "source": {
-            "type": "Literal",
-            "value": moduleName,
-            "raw": `\"${moduleName}\"`,
-        },
-        "specifiers": specifiers.map(el => ({
-            "type": "ImportSpecifier",
-            "imported": {
-                "type": "Identifier",
-                "name": el,
-            },
-            "importKind": "value",
-        })),
-        "importKind": "value",
-        "assertions": [],
-    })
-
-    return [importDeclaration, ...ast.body]
-}
-
-const regMinusRx = /-/ig;
-const regRunesRx = /[\/\[\:]/ig;
-const replaceOpacityRx = /(?:\/\d{1,3}$)/ig;
-const getVariantRx = /^\[(.*)\]\:/ig;
-
-function convertFromString(classes: string): prettier.AST {
-    return {
-        type: 'JSXExpressionContainer',
-        expression: AppendMemberExpression(
-            extractVariantsAndElements(
-                classes.replace(regMinusRx, "_").split(" ")
-            )
-        ),
-    }
-}
-
-function AppendMemberExpression(classElements: Record<string, any>): any {
-    return renderElements(Object.entries(classElements))
 }
 
 function renderElements(elements: string[][]) {
@@ -367,8 +390,12 @@ function renderElements(elements: string[][]) {
     return result
 }
 
-function renderLiteral(text: string) {
-    return ts.factory.createStringLiteral(text).text
+function renderLiteral(text: string | boolean | null | number | RegExp) {
+    return {
+        type: "Literal",
+        value: text,
+        raw: `\"${text}\"`,
+    }
 }
 
 function renderEntry(property: prettier.AST, object: prettier.AST): prettier.AST {
@@ -388,7 +415,7 @@ function renderVariantEntry(property: prettier.AST, object: prettier.AST, subcla
             property,
             object
         },
-        arguments: [renderLiteral(`"${variantRule.replace("..",":")}"`), renderElements(Object.entries(subClasses as Record<string, any>).sort(sortingByNameNull))]
+        arguments: [renderLiteral(variantRule.replace("..", ":")), renderElements(Object.entries(subClasses as Record<string, any>).sort(sortingByNameNull))]
     }
 }
 
@@ -415,46 +442,9 @@ function parseElementName(name: string): prettier.AST {
     return ts.factory.createIdentifier(name.replace("[", "['").replace("]", "']")).text
 }
 
-function dlv(obj: Record<string, any>, key: string[] | string, def?, p?, undef?) {
-    if (typeof key === "string") {
-        key = key.split ? key.split('.') : key;
-    }
-    for (p = 0; p < key.length; p++) {
-        obj = obj ? obj[key[p]] : undef;
-    }
-    return obj === undef ? def : obj;
-}
-
-function merge(a: any, b: any, k?: any) {
-    if (typeof a === 'object' && typeof b === 'object') {
-        if (Array.isArray(a) && Array.isArray(b)) {
-            for (k = 0; k < b.length; k++) {
-                a[k] = merge(a[k], b[k]);
-            }
-        } else {
-            for (k in b) {
-                if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
-                a[k] = merge(a[k], b[k]);
-            }
-        }
-        return a;
-    }
-    return b;
-}
-
-function dset<T extends object, V>(obj: T, keys: string | ArrayLike<string | number>, value: V): void;
-
-function dset(obj, keys, val) {
-    keys.split && (keys = keys.split('.'));
-    let i = 0, l = keys.length, t = obj, x, k;
-    while (i < l) {
-        k = keys[i++];
-        if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
-        t = t[k] = (i === l) ? merge(t[k], val) : (typeof (x = t[k]) === typeof keys) ? x : (keys[i] * 0 !== 0 || !!~('' + keys[i]).indexOf('.')) ? {} : [];
-    }
-}
 
 const sortingByNameNull = (prev: any, next: any) => (Number(Boolean(prev[1])) + prev[0]).localeCompare(Number(Boolean(next[1])) + next[0])
+const sortingNodeByValue = (prev: any, next: any) => prev.value.localeCompare(next.value)
 
 const extractVariantsAndElements = (classList: string[]) => {
     let elements: Record<string, any> = {}
@@ -504,6 +494,7 @@ const extractVariantsAndElements = (classList: string[]) => {
     return Object.fromEntries(Object.entries(elements).sort(sortingByNameNull))
 }
 
+
 export const options = {
     tailwindConfig: {
         type: 'string',
@@ -519,4 +510,43 @@ export const parsers: Record<string, prettier.Parser> = {
     typescript: createParser('typescript', transformJavaScript),
     'babel-ts': createParser('babel-ts', transformJavaScript),
     __js_expression: createParser('__js_expression', transformJavaScript),
+}
+
+
+function dlv(obj: Record<string, any>, key: string[] | string, def?, p?, undef?) {
+    if (typeof key === "string") {
+        key = key.split ? key.split('.') : key;
+    }
+    for (p = 0; p < key.length; p++) {
+        obj = obj ? obj[key[p]] : undef;
+    }
+    return obj === undef ? def : obj;
+}
+
+function merge(a: any, b: any, k?: any) {
+    if (typeof a === 'object' && typeof b === 'object') {
+        if (Array.isArray(a) && Array.isArray(b)) {
+            for (k = 0; k < b.length; k++) {
+                a[k] = merge(a[k], b[k]);
+            }
+        } else {
+            for (k in b) {
+                if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
+                a[k] = merge(a[k], b[k]);
+            }
+        }
+        return a;
+    }
+    return b;
+}
+
+function dset<T extends object, V>(obj: T, keys: string | ArrayLike<string | number>, value: V): void;
+function dset(obj, keys, val) {
+    keys.split && (keys = keys.split('.'));
+    let i = 0, l = keys.length, t = obj, x, k;
+    while (i < l) {
+        k = keys[i++];
+        if (k === '__proto__' || k === 'constructor' || k === 'prototype') break;
+        t = t[k] = (i === l) ? merge(t[k], val) : (typeof (x = t[k]) === typeof keys) ? x : (keys[i] * 0 !== 0 || !!~('' + keys[i]).indexOf('.')) ? {} : [];
+    }
 }
